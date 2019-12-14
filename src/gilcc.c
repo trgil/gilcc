@@ -19,6 +19,15 @@
 
 #include "gilcc.h"
 
+static char *srcs[GILCC_SRCS_MAX_NUM];
+static int srcs_num;
+
+static char *ipaths[GILCC_IPATH_MAX_NUM];
+static int ipaths_num;
+
+static char *defs[GILCC_DEFS_MAX_NUM];
+static int defs_num;
+
 static void print_usage(void)
 {
     printf( "usage: gilcc [OPTIONS] [Input files]\n"
@@ -33,27 +42,67 @@ static void print_usage(void)
 
 static void print_version(void)
 {
-    printf("gilcc - Gil's Code Clean, version %.1f\n", GILCC_VERSION);
+    printf("gilcc - Gil's Code Cleanup, version %.1f\n", GILCC_VERSION);
 }
 
 static int parse_cmd(int argc, char** argv)
 {
     char *cmd;
-    int srcs = 0;
 
     while (argc) {
         cmd = argv[0];
 
         if (cmd[0] == '-') {
             /* Probably a flag. */
+
             if (!strcmp(cmd, "-h") || !strcmp(cmd, "--help")) {
                 print_usage();
+                srcs_num = 0;
                 return 0;
 
             } else if (!strcmp(cmd, "-v") || !strcmp(cmd, "--version")) {
                 print_version();
+                srcs_num = 0;
                 return 0;
 
+            } else if (!strncmp(cmd, "-D", 2)) {
+                if (defs_num >= GILCC_DEFS_MAX_NUM) {
+                    fprintf(stderr, "**Error: too many defines.\n");
+                    return -1;
+                }
+
+                if (strlen(cmd) > 2) {
+                    defs[defs_num++] = (cmd + 2);
+                } else {
+                    if (argc == 1) {
+                        fprintf(stderr, "**Error: missing define parameter.\n");
+                        return -1;
+                    }
+
+                    argc--;
+                    argv++;
+                    defs[defs_num++] = argv[0];
+                }
+
+            } else if (!strncmp(cmd, "-I", 2)) {
+                if (ipaths_num >= GILCC_IPATH_MAX_NUM) {
+                    fprintf(stderr, "**Error: too many defines.\n");
+                    return -1;
+                }
+
+                if (strlen(cmd) > 2) {
+                    ipaths[ipaths_num++] = (cmd + 2);
+
+                } else {
+                    if (argc == 1) {
+                        fprintf(stderr, "**Error: missing include path parameter.\n");
+                        return -1;
+                    }
+
+                    argc--;
+                    argv++;
+                    ipaths[ipaths_num++] = argv[0];
+                }
             }
 
             /* Unmatched flags will be ignored. */
@@ -61,36 +110,39 @@ static int parse_cmd(int argc, char** argv)
         } else {
             /* Probably a file. */
 
-            srcs++;
+            if (srcs_num >= GILCC_SRCS_MAX_NUM) {
+                fprintf(stderr, "**Error: too many input files.\n");
+                return -1;
+            }
+
+            srcs[srcs_num++] = cmd;
         }
 
         argc--;
         argv++;
     }
-
-    return srcs;
+    return 0;
 }
 
 int main(int argc, char** argv)
 {
-    int srcs;
+    if(parse_cmd(--argc, ++argv) < 0)
+        /* Something went wrong during CLI command parsing. */
+        return 1;
 
-    srcs = parse_cmd(argc--, argv++);
-
-    if (srcs == 0) {
+    if (srcs_num == 0) {
         if (argc > 2)
             /* We have multiple flags with no input files. */
             return 2;
 
-        /* We have a single flag. */
+        /* We have a single flag, no input files (probably a -v or -h). */
         return 0;
     }
 
-    if (srcs < 0)
-        return 1;
+    while (srcs_num) {
+        printf("Processing file: %s\n", srcs[--srcs_num]);
 
-    while (--srcs) {
-        /* Process each input file here. */
+        /* Process file. */
     }
 
     return 0;

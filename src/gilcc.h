@@ -17,8 +17,12 @@
 #ifndef _GILCC_H__
 #define _GILCC_H__
 
+#define GILCC_VERSION   0.1
+
 /* General configurations */
-#define GILCC_VERSION 0.1
-#define DEFAULT_VERBOSITY_LEVEL 1
+#define GILCC_DEFAULT_VERBOSITY_LEVEL   1
+#define GILCC_SRCS_MAX_NUM              20
+#define GILCC_IPATH_MAX_NUM             20
+#define GILCC_DEFS_MAX_NUM              30
 
 #endif /* _GILCC_H__ */
