@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "gilcc.h"
+#include "std_comp.h"
 
 static char *srcs[GILCC_SRCS_MAX_NUM];
 static int srcs_num;
@@ -27,6 +28,11 @@ static int ipaths_num;
 
 static char *defs[GILCC_DEFS_MAX_NUM];
 static int defs_num;
+
+/* TODO: configure policy for multiple standard flags */
+static unsigned long STD_CMP;
+
+#define SET_STD_FLAG(STD) (1-(STD<<1))
 
 static void print_usage(void)
 {
@@ -43,6 +49,12 @@ static void print_usage(void)
 static void print_version(void)
 {
     printf("gilcc - Gil's Code Cleanup, version %.1f\n", GILCC_VERSION);
+}
+
+static inline int std_error()
+{
+    fprintf(stderr, "Invalid standard configuration.\n");
+    return -1;
 }
 
 static int parse_cmd(int argc, char** argv)
@@ -64,6 +76,68 @@ static int parse_cmd(int argc, char** argv)
                 print_version();
                 srcs_num = 0;
                 return 0;
+
+            } else if ( !strcmp(cmd, "-ansi") ||
+                        !strcmp(cmd, "-std=c90") ||
+                        !strcmp(cmd, "-std=iso9899:1990")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C90_ORIG);
+
+            } else if (!strcmp(cmd, "-std=gnu90")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C90_GNU);
+
+            } else if (!strcmp(cmd, "-std=iso9899:199409")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C95_AMD1);
+
+            } else if ( !strcmp(cmd, "-std=c99") ||
+                        !strcmp(cmd, "-std=iso9899:1999")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C99_ORIG);
+
+            } else if (!strcmp(cmd, "-std=gnu99")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C99_GNU);
+
+            } else if ( !strcmp(cmd, "-std=c11") ||
+                        !strcmp(cmd, "-std=iso9899:2011")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C11_ORIG);
+
+            } else if (!strcmp(cmd, "-std=gnu11")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C11_GNU);
+
+            } else if ( !strcmp(cmd, "-std=c17") ||
+                        !strcmp(cmd, "-std=iso9899:2017")) {
+
+                if (STD_CMP)
+                    return std_error();
+
+                STD_CMP = SET_STD_FLAG(C_STANDARD_C17_ORIG);
+
 
             } else if (!strncmp(cmd, "-D", 2)) {
                 if (defs_num >= GILCC_DEFS_MAX_NUM) {
@@ -138,6 +212,9 @@ int main(int argc, char** argv)
         /* We have a single flag, no input files (probably a -v or -h). */
         return 0;
     }
+
+    if (!STD_CMP)
+        STD_CMP = SET_STD_FLAG(C_STANDARD_C11_GNU);
 
     while (srcs_num) {
         printf("Processing file: %s\n", srcs[--srcs_num]);
