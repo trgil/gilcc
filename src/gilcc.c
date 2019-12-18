@@ -16,6 +16,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "gilcc.h"
 #include "std_comp.h"
@@ -216,8 +217,13 @@ int main(int argc, char** argv)
     if (!STD_CMP)
         STD_CMP = SET_STD_FLAG(C_STANDARD_C11_GNU);
 
-    while (srcs_num) {
-        printf("Processing file: %s\n", srcs[--srcs_num]);
+    while (srcs_num--) {
+        if (access(srcs[srcs_num], R_OK)) {
+            fprintf(stderr, "**Error: Could Not access file: %s\n", srcs[srcs_num]);
+            continue;
+        }
+
+        printf("Processing file [ %s ]:\n", srcs[srcs_num]);
 
         /* Process file. */
     }
