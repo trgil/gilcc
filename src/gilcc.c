@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include "gilcc.h"
 #include "std_comp.h"
@@ -34,6 +35,9 @@ static int defs_num;
 static unsigned long STD_CMP;
 
 #define SET_STD_FLAG(STD) (1-(STD<<1))
+
+#define TMP_FILE_NAME ".gilcc-tmpfile-XXXXXX"
+#define TMP_FILE_SIZE 22
 
 static void print_usage(void)
 {
@@ -201,6 +205,9 @@ static int parse_cmd(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
+    int fd;
+    char fname[TMP_FILE_SIZE];
+
     if(parse_cmd(--argc, ++argv) < 0)
         /* Something went wrong during CLI command parsing. */
         return 1;
@@ -225,7 +232,16 @@ int main(int argc, char** argv)
 
         printf("Processing file [ %s ]:\n", srcs[srcs_num]);
 
-        /* Process file. */
+        strncpy(fname, TMP_FILE_NAME, TMP_FILE_SIZE);
+        fd = mkstemp(fname);
+        if (fd == -1) {
+            fprintf(stderr, "**Error: could not create a working file.\n");
+            return -1;
+        }
+
+        /* Process source content in a temporary working file. */
+
+        unlink(fname);
     }
 
     return 0;
