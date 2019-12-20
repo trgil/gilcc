@@ -17,6 +17,8 @@
 #ifndef _STD_COMP_H__
 #define _STD_COMP_H__
 
+#include <stdbool.h>
+
 /* Standard complience defines */
 #define C_STANDARD_KNR_ORIG 0x0001UL
 #define C_STANDARD_C89_ORIG 0x0002UL
@@ -99,6 +101,16 @@ struct std_trans_lim {
 
     /* Nesting level for structs and unions. */
     unsigned int cmpnd_nst_lvl;
+};
+
+/* Translation configurations */
+struct trans_config {
+
+    /* Standard based configurations */
+    struct std_trans_lim lim;
+
+    /* Other common translation configurations */
+    bool exp_trigraphs;
 };
 
 #endif /* _STD_COMP_H__ */
