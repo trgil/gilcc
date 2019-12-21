@@ -125,8 +125,6 @@ static int src_parser_trans_stage_1_2_3(const int tmp_fd, const char *src, const
 
         while (PBUF_F_REMD(pbuf)) {
 
-            /* TODO: change to state flow (with switch-case) */
-
             switch (p_state) {
             case P_STATE_COMMENT_C:
 
