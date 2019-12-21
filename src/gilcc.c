@@ -21,6 +21,7 @@
 
 #include "gilcc.h"
 #include "std_comp.h"
+#include "src_parser.h"
 
 static char *srcs[GILCC_SRCS_MAX_NUM];
 static int srcs_num;
@@ -35,9 +36,6 @@ static int defs_num;
 static unsigned long STD_CMP;
 
 #define SET_STD_FLAG(STD) (1-(STD<<1))
-
-#define TMP_FILE_NAME ".gilcc-tmpfile-XXXXXX"
-#define TMP_FILE_SIZE 22
 
 static void print_usage(void)
 {
@@ -56,7 +54,7 @@ static void print_version(void)
     printf("gilcc - Gil's Code Cleanup, version %.1f\n", GILCC_VERSION);
 }
 
-static inline int std_error()
+static inline int std_error(void)
 {
     fprintf(stderr, "Invalid standard configuration.\n");
     return -1;
@@ -205,8 +203,7 @@ static int parse_cmd(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-    int fd;
-    char fname[TMP_FILE_SIZE];
+    const struct trans_config cfg;
 
     if(parse_cmd(--argc, ++argv) < 0)
         /* Something went wrong during CLI command parsing. */
@@ -231,17 +228,7 @@ int main(int argc, char** argv)
         }
 
         printf("Processing file [ %s ]:\n", srcs[srcs_num]);
-
-        strncpy(fname, TMP_FILE_NAME, TMP_FILE_SIZE);
-        fd = mkstemp(fname);
-        if (fd == -1) {
-            fprintf(stderr, "**Error: could not create a working file.\n");
-            return -1;
-        }
-
-        /* Process source content in a temporary working file. */
-
-        unlink(fname);
+        src_parser_cpp(srcs[srcs_num], cfg);
     }
 
     return 0;
