@@ -228,7 +228,8 @@ int main(int argc, char** argv)
         }
 
         printf("Processing file [ %s ]:\n", srcs[srcs_num]);
-        src_parser_cpp(srcs[srcs_num], cfg);
+        if (src_parser_cpp(srcs[srcs_num], &cfg) < 0)
+            return 1;
     }
 
     return 0;

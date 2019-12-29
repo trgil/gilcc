@@ -19,7 +19,9 @@
 
 #include "std_comp.h"
 
+extern struct trans_config TRANS_CFG;
+
 /* Source Parser API */
-int src_parser_cpp(const char *src, const struct trans_config cfg);
+int src_parser_cpp(const char *src, const struct trans_config *cfg);
 
 #endif /* _SRC_PARSER_H__ */
