@@ -25,10 +25,6 @@
 #define TMP_FILE_NAME           ".gilcc-tmpfile-XXXXXX"
 #define TMP_FILE_NAME_SIZE      22
 
-/* Parse states: */
-#define P_STATE_CODE        0
-#define P_STATE_COMMENT_C   1
-
 /* Parser file-buffer/stack */
 #define PSTACK_BUF_SIZE     2
 #define PARSER_BUF_SIZE     200
@@ -42,7 +38,6 @@ struct pbuf {
 #define PBUF_CUR_CHAR(B) (B->pbuf_buf[B->pbuf_indx])
 #define PBUF_DATA_SIZE(B) (B->pbuf_content_size - B->pbuf_indx)
 #define PBUF_ADVN(B) (B->pbuf_indx++)
-#define PBUF_CLEAR(B) (B->pbuf_indx = 0)
 #define PBUF_EMPTY(B) (!(PBUF_DATA_SIZE(B)))
 #define PBUF_NOT_EMPTY(B) (!(PBUF_EMPTY(B)))
 
@@ -71,12 +66,9 @@ struct pstack {
 };
 
 #define PSTACK_DATA_SIZE(S) (S.pstack_indx)
-#define PSTACK_EMPTY(S) (!(PSTACK_DATA_SIZE(S)))
-#define PSTACK_NOT_EMPTY(S) (!(PSTACK_EMPTY(S)))
 #define PSTACK_PUSH_CHAR(S, C) (S.pstack_buf[S.pstack_indx++] = C)
 #define PSTACK_POP_N(S, N) (S.pstack_indx -= N)
 #define PSTACK_CLEAR(S) (S.pstack_indx = 0)
-#define PSTACK_GET_ELEMENT(S, L) (S.pstack_buf[L - 1])
 #define PSTACK_GET_ELEMENT_REV(S, L) (S.pstack_buf[S.pstack_indx - L])
 
 static inline int pstack_write(struct pstack *stk, const int ofd)
@@ -256,7 +248,6 @@ static int src_parser_tstage_1_2_3_default( const int tmp_fd,
                     return -1;
             }
         }
-
         PBUF_ADVN(buf);
     }
 
