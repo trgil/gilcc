@@ -46,3 +46,6 @@
 *.swp
 *.swap
 *.un~
+
+# Test files
+test_files/
