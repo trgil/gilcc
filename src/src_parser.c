@@ -35,18 +35,16 @@ struct pbuf {
     int pbuf_indx;
 };
 
-#define PBUF_CUR_CHAR(B) (B->pbuf_buf[B->pbuf_indx])
-#define PBUF_DATA_SIZE(B) (B->pbuf_content_size - B->pbuf_indx)
-#define PBUF_ADVN(B) (B->pbuf_indx++)
-#define PBUF_EMPTY(B) (!(PBUF_DATA_SIZE(B)))
-#define PBUF_NOT_EMPTY(B) (!(PBUF_EMPTY(B)))
+#define PBUF_CUR_CHAR(B) (B.pbuf_buf[B.pbuf_indx])
+#define PBUF_DATA_SIZE(B) (B.pbuf_content_size - B.pbuf_indx)
+#define PBUF_ADVN(B) (B.pbuf_indx++)
 
 static int pbuf_fill(struct pbuf *buf, const int ifd)
 {
     int read_size;
 
-    if (PBUF_NOT_EMPTY(buf))
-        return PBUF_DATA_SIZE(buf);
+    if (buf->pbuf_content_size - buf->pbuf_indx)
+        return (buf->pbuf_content_size - buf->pbuf_indx);
 
     read_size = read(ifd, buf->pbuf_buf, PARSER_BUF_SIZE);
     buf->pbuf_indx = 0;
@@ -67,9 +65,7 @@ struct pstack {
 
 #define PSTACK_DATA_SIZE(S) (S.pstack_indx)
 #define PSTACK_PUSH_CHAR(S, C) (S.pstack_buf[S.pstack_indx++] = C)
-#define PSTACK_POP_N(S, N) (S.pstack_indx -= N)
 #define PSTACK_CLEAR(S) (S.pstack_indx = 0)
-#define PSTACK_GET_ELEMENT_REV(S, L) (S.pstack_buf[S.pstack_indx - L])
 
 static inline int pstack_write(struct pstack *stk, const int ofd)
 {
@@ -78,32 +74,8 @@ static inline int pstack_write(struct pstack *stk, const int ofd)
     if (!stk->pstack_indx)
         return 0;
 
-    if ((write_size = write(ofd, stk->pstack_buf, stk->pstack_indx)) < 0)
-        return write_size;
-
-    stk->pstack_indx = 0;
-
-    return write_size;
-}
-
-static inline int pstack_shift_write_n(struct pstack *stk, const int ofd, const int n)
-{
-    int write_size;
-    int i;
-
-    if (!stk->pstack_indx)
-        return 0;
-
-    if (n > stk->pstack_indx)
-        return -1;
-
-    if ((write_size = write(ofd, stk->pstack_buf, n)) < 0)
-        return write_size;
-
-    for (i = 0; (i + n) < stk->pstack_indx; i++)
-        stk->pstack_buf[i] = stk->pstack_buf[(i + n)];
-
-    stk->pstack_indx -= n;
+    if ((write_size = write(ofd, stk->pstack_buf, stk->pstack_indx)) > 0)
+        stk->pstack_indx = 0;
 
     return write_size;
 }
@@ -124,178 +96,398 @@ static void print_file_full(int fd)
         while (read_indx < read_size)
             putchar(f_buf[read_indx++]);
     }
+    printf("\n");
 }
 
-static int src_parser_tstage_1_2_3_c_cmnt(  const int tmp_fd,
-                                            const int src_fd,
-                                            struct pbuf *buf,
-                                            const struct trans_config *cfg)
+static inline int write_char(const char c, const int ofd)
 {
-    struct pstack stk = {
-        .pstack_indx = 0
-    };
-
-    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(buf, src_fd) > 0)) {
-        switch (PBUF_CUR_CHAR(buf)) {
-        case '*':
-            PSTACK_PUSH_CHAR(stk, '*');
-            break;
-
-        case '/':
-            PSTACK_PUSH_CHAR(stk, '/');
-            break;
-
-        default:
-            PSTACK_CLEAR(stk);
-            break;
-        }
-
-        if (PSTACK_DATA_SIZE(stk) > 1) {
-            if (    (PSTACK_GET_ELEMENT_REV(stk, 2) == '*') &&
-                    (PSTACK_GET_ELEMENT_REV(stk, 1) == '/')) {
-                PBUF_ADVN(buf);
-                return 0;
-            } else {
-                if (pstack_shift_write_n(&stk, tmp_fd, 1) < 0)
-                    return -1;
-            }
-        }
-
-        PBUF_ADVN(buf);
-    }
-
-    /* If we get here, we have reached the end of the file without ending the
-     * comment.
-     */
-
-    return -1;
+    return write(ofd, &c, 1);
 }
 
-static int src_parser_tstage_1_2_3_default( const int tmp_fd,
-                                            const int src_fd,
-                                            struct pbuf *buf,
-                                            const struct trans_config *cfg)
-{
-    struct pstack stk = {
-        .pstack_indx = 0
-    };
-
-    pbuf_fill(buf, src_fd);
-
-    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(buf, src_fd) > 0)) {
-
-        switch (PBUF_CUR_CHAR(buf)) {
-        case ' ':
-        case '\t':
-            PSTACK_PUSH_CHAR(stk, ' ');
-            break;
-
-        case '\r':
-        case '\n':
-            PSTACK_PUSH_CHAR(stk, '\n');
-            break;
-
-        case '\\':
-            PSTACK_PUSH_CHAR(stk, '\\');
-            break;
-
-        case '/':
-            PSTACK_PUSH_CHAR(stk, '/');
-            break;
-
-        case '*':
-            PSTACK_PUSH_CHAR(stk, '*');
-            break;
-
-        default:
-            pstack_write(&stk, tmp_fd);
-            pbuf_write_char(buf, tmp_fd);
-            PBUF_ADVN(buf);
-            continue;
-        }
-
-        if (PSTACK_DATA_SIZE(stk) > 1) {
-            if ((PSTACK_GET_ELEMENT_REV(stk, 2) == ' ') &&
-                (PSTACK_GET_ELEMENT_REV(stk, 1) == ' ')) {
-                PSTACK_POP_N(stk, 1);
-
-            } else if ( (PSTACK_GET_ELEMENT_REV(stk, 2) == '\n') &&
-                        (PSTACK_GET_ELEMENT_REV(stk, 1) == '\n')) {
-                PSTACK_POP_N(stk, 1);
-
-            } else if ( (PSTACK_GET_ELEMENT_REV(stk, 2) == '\n') &&
-                        (PSTACK_GET_ELEMENT_REV(stk, 1) == ' ')) {
-                PSTACK_POP_N(stk, 1);
-
-            } else if ( (PSTACK_GET_ELEMENT_REV(stk, 2) == ' ') &&
-                        (PSTACK_GET_ELEMENT_REV(stk, 1) == '\n')) {
-                PSTACK_POP_N(stk, 2);
-                PSTACK_PUSH_CHAR(stk, '\n');
-
-            } else if ( (PSTACK_GET_ELEMENT_REV(stk, 2) == '/') &&
-                        (PSTACK_GET_ELEMENT_REV(stk, 1) == '*')) {
-                PSTACK_POP_N(stk, 2);
-                if (src_parser_tstage_1_2_3_c_cmnt(tmp_fd, src_fd, buf, cfg) < 0)
-                    return -1;
-
-            } else if ( (PSTACK_GET_ELEMENT_REV(stk, 2) == '\\') &&
-                        (PSTACK_GET_ELEMENT_REV(stk, 1) == '\n')) {
-                PSTACK_POP_N(stk, 2);
-
-            } else {
-
-                if (pstack_shift_write_n(&stk, tmp_fd, 1) < 0)
-                    return -1;
-            }
-        }
-        PBUF_ADVN(buf);
-    }
-
-    return 0;
-}
-
-static int src_parser_tstage_1_2_3(const int tmp_fd, const char *src, const struct trans_config *cfg)
+static int src_parser_tstage_1( const int dst_fd,
+                                const int src_fd,
+                                const bool exp_trigraphs)
 {
     struct pbuf buf = {
         .pbuf_indx = 0,
         .pbuf_content_size = 0
     };
 
+    struct pstack stk = {
+        .pstack_indx = 0
+    };
+
+    int state = 0;
+
+    /* CPP Translation phase 1:
+     *  - Map physical characters to source character set.
+     *  - Expand trigraphs (if supported).
+     *
+     * There are several possibilities for end-of-line indicator, which should be
+     * replaced each with a single new-line character:
+     *  - LF (\n), ASCII: 10.
+     *  - CR (\r), ASCII: 13.
+     *  - CR + LF (\r\n), ASCII: 13 + 10.
+     *  - LF + CR (\n\r), ASCII: 10 + 13.
+     *  - RS (Record Separator), ASCII: 30
+     *
+     * Trigraphs all start with the sequence '??'.
+     */
+
+    pbuf_fill(&buf, src_fd);
+    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
+        switch(state) {
+        case 0:
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '\r':
+                state++;
+            case '\n':
+                state++;
+            case 30:
+                write_char('\n', dst_fd);
+                PBUF_ADVN(buf);
+                break;
+
+            case '?':
+                if (exp_trigraphs == true) {
+                    PSTACK_PUSH_CHAR(stk, '?');
+                    PBUF_ADVN(buf);
+                    state = 3;
+                    break;
+                }
+            default:
+                pbuf_write_char(&buf, dst_fd);
+                PBUF_ADVN(buf);
+            }
+
+            break;
+
+        case 1:
+            if (PBUF_CUR_CHAR(buf) == '\r')
+                PBUF_ADVN(buf);
+            state = 0;
+            break;
+
+        case 2:
+            if (PBUF_CUR_CHAR(buf) == '\n')
+                PBUF_ADVN(buf);
+            state = 0;
+            break;
+
+        case 3:
+            if (PBUF_CUR_CHAR(buf) == '?') {
+                PSTACK_PUSH_CHAR(stk, '?');
+                PBUF_ADVN(buf);
+                state = 4;
+            } else {
+                pstack_write(&stk, dst_fd);
+                state = 0;
+            }
+            break;
+
+        case 4:
+            {
+                char c;
+
+                switch (PBUF_CUR_CHAR(buf)) {
+                case '=':
+                    c = '#';
+                    break;
+                case '(':
+                    c = '[';
+                    break;
+                case ')':
+                    c = ']';
+                    break;
+                case '/':
+                    c = '\\';
+                    break;
+                case '\'':
+                    c = '^';
+                    break;
+                case '<':
+                    c = '{';
+                    break;
+                case '>':
+                    c = '}';
+                    break;
+                case '!':
+                    c = '|';
+                    break;
+                case '-':
+                    c = '~';
+                    break;
+                default:
+                    c = '\0';
+                    break;
+                }
+
+                if (c) {
+                    write_char(c, dst_fd);
+                    PSTACK_CLEAR(stk);
+                    PBUF_ADVN(buf);
+                } else {
+                    pstack_write(&stk, dst_fd);
+                }
+            }
+
+            state = 0;
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int src_parser_tstage_2( const int dst_fd,
+                                const int src_fd)
+{
+    struct pbuf buf = {
+        .pbuf_indx = 0,
+        .pbuf_content_size = 0
+    };
+
+    int state = 0;
+
+    /* CPP Translation phase 2:
+     * Join split lines.
+     */
+
+    pbuf_fill(&buf, src_fd);
+    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
+        switch (state) {
+        case 0:
+            if (PBUF_CUR_CHAR(buf) == '\\')
+                state = 1;
+            else
+                pbuf_write_char(&buf, dst_fd);
+
+            PBUF_ADVN(buf);
+            break;
+
+        case 1:
+            if (PBUF_CUR_CHAR(buf) == '\n')
+                PBUF_ADVN(buf);
+            else
+                write_char('\\', dst_fd);
+
+            state = 0;
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    /* TODO: check if file ends with '\n', warn if not? */
+    return 0;
+}
+
+static int src_parser_tstage_3( const int dst_fd,
+                                const int src_fd,
+                                const bool exp_cpp_cmnts)
+{
+    struct pbuf buf = {
+        .pbuf_indx = 0,
+        .pbuf_content_size = 0
+    };
+
+    int state = 0;
+    bool in_string = false;
+
+    /* CPP Translation phase 3:
+     *  - Replace comments with white spaces.
+     *  - Turn horizontal tabs (not in strings) into white spaces
+     *      (not required by standard).
+     *  - Truncate sequential white spaces.
+     *  - Truncate sequential new-lines (not required by standard).
+     */
+
+    pbuf_fill(&buf, src_fd);
+    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
+        switch (state) {
+        case 0:
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '/':
+                state = 1;
+                break;
+
+            case ' ':
+            case '\t':
+                if (in_string) {
+                    pbuf_write_char(&buf, dst_fd);
+                } else {
+                    write_char(' ', dst_fd);
+                    state = 5;
+                }
+                PBUF_ADVN(buf);
+                break;
+
+            case '\n':
+                if (in_string) {
+                    pbuf_write_char(&buf, dst_fd);
+                } else {
+                    write_char('\n', dst_fd);
+                    state = 6;
+                }
+                PBUF_ADVN(buf);
+                break;
+
+            case '\"':
+                in_string = (in_string)?false:true;
+
+            default:
+                pbuf_write_char(&buf, dst_fd);
+                PBUF_ADVN(buf);
+            }
+            break;
+
+        case 1:
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '*':
+                state = 2;
+                PBUF_ADVN(buf);
+                break;
+
+            case '/':
+                if (exp_cpp_cmnts == true) {
+                    state = 4;
+                    PBUF_ADVN(buf);
+                    break;
+                }
+
+            default:
+                write_char('/', dst_fd);
+                state = 0;
+            }
+            break;
+
+        case 2:
+            if (PBUF_CUR_CHAR(buf) == '*')
+                state = 3;
+            PBUF_ADVN(buf);
+            break;
+
+        case 3:
+            if (PBUF_CUR_CHAR(buf) == '/')
+                state = 0;
+            else
+                state = 2;
+            PBUF_ADVN(buf);
+            break;
+
+        case 4:
+            if (PBUF_CUR_CHAR(buf) == '\n')
+                state = 0;
+            PBUF_ADVN(buf);
+            break;
+
+        case 5:
+            if ((PBUF_CUR_CHAR(buf) == ' ') || (PBUF_CUR_CHAR(buf) == '\t'))
+                PBUF_ADVN(buf);
+            else
+                state = 0;
+            break;
+
+        case 6:
+            if (PBUF_CUR_CHAR(buf) == '\n')
+                PBUF_ADVN(buf);
+            else
+                state = 0;
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    /* TODO: check if file ends an unterminated c-style comment, warn if not? */
+    return 0;
+}
+
+int src_parser_cpp(const char *src, const struct trans_config *cfg)
+{
+    int tmp_fd1, tmp_fd2, tmp_fd3;
     int src_fd;
+    char fname1[TMP_FILE_NAME_SIZE];
+    char fname2[TMP_FILE_NAME_SIZE];
+    char fname3[TMP_FILE_NAME_SIZE];
     int ret_val;
 
+    /* Open the source file */
     src_fd = open(src, O_RDONLY);
     if (src_fd == -1) {
         fprintf(stderr, "**Error: Could not open source file: %s.\n", src);
         return -1;
     }
 
-    ret_val = src_parser_tstage_1_2_3_default(tmp_fd, src_fd, &buf, cfg);
-
-    close(src_fd);
-
-    return ret_val;
-}
-
-int src_parser_cpp(const char *src, const struct trans_config *cfg)
-{
-    int tmp_fd;
-    char fname[TMP_FILE_NAME_SIZE];
-    int ret_val;
-
-    strncpy(fname, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
-    tmp_fd = mkstemp(fname);
-    if (tmp_fd == -1) {
+    /* Open temporary work-file for stage 1 */
+    strncpy(fname1, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
+    tmp_fd1 = mkstemp(fname1);
+    if (tmp_fd1 == -1) {
         fprintf(stderr, "**Error: could not create a working file.\n");
         return -1;
     }
 
-    ret_val = src_parser_tstage_1_2_3(tmp_fd, src, cfg);
+    /* Do stage 1 parsing */
+    ret_val = src_parser_tstage_1(tmp_fd1, src_fd, cfg->exp_trigraphs);
     if (ret_val < 0)
         return ret_val;
 
-    print_file_full(tmp_fd);
-    unlink(fname);
+    /* Source file no longer needed */
+    close(src_fd);
+
+    /* Open temporary work-file for stage 2 */
+    strncpy(fname2, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
+    tmp_fd2 = mkstemp(fname2);
+    if (tmp_fd2 == -1) {
+        fprintf(stderr, "**Error: could not create a working file.\n");
+        return -1;
+    }
+
+    /* Rewind stage 1 output file */
+    if (lseek(tmp_fd1, 0, SEEK_SET)) {
+        fprintf(stderr, "**Error: Could not set offset.\n");
+        return -1;
+    }
+
+    /* Do stage 2 parsing */
+    ret_val = src_parser_tstage_2(tmp_fd2, tmp_fd1);
+    if (ret_val < 0)
+        return ret_val;
+
+    /* Stage 1 file no longer needed */
+    unlink(fname1);
+
+    /* Open temporary work-file for stage 3 */
+    strncpy(fname3, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
+    tmp_fd3 = mkstemp(fname3);
+    if (tmp_fd2 == -1) {
+        fprintf(stderr, "**Error: could not create a working file.\n");
+        return -1;
+    }
+
+    /* Rewind stage 2 output file */
+    if (lseek(tmp_fd2, 0, SEEK_SET)) {
+        fprintf(stderr, "**Error: Could not set offset.\n");
+        return -1;
+    }
+
+    /* Do stage 3 parsing */
+    ret_val = src_parser_tstage_3(tmp_fd3, tmp_fd2, cfg->exp_cpp_cmnts);
+    if (ret_val < 0)
+        return ret_val;
+
+    /* Stage 2 file no longer needed */
+    unlink(fname2);
+    printf("Stage 3 output:\n");
+    print_file_full(tmp_fd3);
+
+    /* Stage 3 file no longer needed */
+    unlink(fname3);
 
     return 0;
 }

@@ -111,6 +111,7 @@ struct trans_config {
 
     /* Other common translation configurations */
     bool exp_trigraphs;
+    bool exp_cpp_cmnts;
 };
 
 #endif /* _STD_COMP_H__ */
