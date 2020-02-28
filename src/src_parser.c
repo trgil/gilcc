@@ -313,6 +313,7 @@ static int src_parser_tstage_3( const int dst_fd,
             switch (PBUF_CUR_CHAR(buf)) {
             case '/':
                 state = 1;
+                PBUF_ADVN(buf);
                 break;
 
             case ' ':
