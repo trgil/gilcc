@@ -32,11 +32,6 @@ static int ipaths_num;
 static char *defs[GILCC_DEFS_MAX_NUM];
 static int defs_num;
 
-/* TODO: configure policy for multiple standard flags */
-static unsigned long STD_CMP;
-
-#define SET_STD_FLAG(STD) (1-(STD<<1))
-
 static void print_usage(void)
 {
     printf( "usage: gilcc [OPTIONS] [Input files]\n"
@@ -60,9 +55,11 @@ static inline int std_error(void)
     return -1;
 }
 
-static int parse_cmd(int argc, char** argv)
+static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 {
     char *cmd;
+    if (!cfg)
+        return -1;
 
     while (argc) {
         cmd = argv[0];
@@ -84,63 +81,77 @@ static int parse_cmd(int argc, char** argv)
                         !strcmp(cmd, "-std=c90") ||
                         !strcmp(cmd, "-std=iso9899:1990")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C90_ORIG);
+                cfg->std = C_STANDARD_C90_ORIG;
+                cfg->exp_trigraphs = true;
 
             } else if (!strcmp(cmd, "-std=gnu90")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C90_GNU);
+                cfg->std = C_STANDARD_C90_GNU;
+                cfg->exp_cpp_cmnts = true;
 
             } else if (!strcmp(cmd, "-std=iso9899:199409")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C95_AMD1);
+                cfg->std = C_STANDARD_C95_AMD1;
+                cfg->exp_trigraphs = true;
 
             } else if ( !strcmp(cmd, "-std=c99") ||
                         !strcmp(cmd, "-std=iso9899:1999")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C99_ORIG);
+                cfg->std = C_STANDARD_C99_ORIG;
+                cfg->exp_trigraphs = true;
+                cfg->exp_cpp_cmnts = true;
 
             } else if (!strcmp(cmd, "-std=gnu99")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C99_GNU);
+                cfg->std = C_STANDARD_C99_GNU;
+                cfg->exp_cpp_cmnts = true;
 
             } else if ( !strcmp(cmd, "-std=c11") ||
                         !strcmp(cmd, "-std=iso9899:2011")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C11_ORIG);
+                cfg->std = C_STANDARD_C11_ORIG;
+                cfg->exp_trigraphs = true;
+                cfg->exp_cpp_cmnts = true;
 
             } else if (!strcmp(cmd, "-std=gnu11")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C11_GNU);
+                cfg->std = C_STANDARD_C11_GNU;
+                cfg->exp_cpp_cmnts = true;
 
             } else if ( !strcmp(cmd, "-std=c17") ||
                         !strcmp(cmd, "-std=iso9899:2017")) {
 
-                if (STD_CMP)
+                if (cfg->std)
                     return std_error();
 
-                STD_CMP = SET_STD_FLAG(C_STANDARD_C17_ORIG);
+                cfg->std = C_STANDARD_C17_ORIG;
+                cfg->exp_trigraphs = true;
+                cfg->exp_cpp_cmnts = true;
 
+            } else if ( !strcmp(cmd, "-trigraphs")) {
+
+                cfg->exp_trigraphs = true;
 
             } else if (!strncmp(cmd, "-D", 2)) {
                 if (defs_num >= GILCC_DEFS_MAX_NUM) {
@@ -203,9 +214,13 @@ static int parse_cmd(int argc, char** argv)
 
 int main(int argc, char** argv)
 {
-    const struct trans_config cfg;
+    struct trans_config cfg = {
+        .std = 0,
+        .exp_trigraphs = false,
+        .exp_cpp_cmnts = false,
+    };
 
-    if(parse_cmd(--argc, ++argv) < 0)
+    if(parse_cmd(--argc, ++argv, &cfg) < 0)
         /* Something went wrong during CLI command parsing. */
         return 1;
 
@@ -218,8 +233,16 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    if (!STD_CMP)
-        STD_CMP = SET_STD_FLAG(C_STANDARD_C11_GNU);
+    /* TODO: configure policy for multiple standard flags */
+    if (!cfg.std) {
+        cfg.std = C_STANDARD_C11_GNU;
+        cfg.exp_cpp_cmnts = true;
+    }
+
+    if (set_std_limits(&cfg.lim, cfg.std)) {
+        fprintf(stderr, "**Error: Could Not configure standard limits\n");
+        return 1;
+    }
 
     while (srcs_num--) {
         if (access(srcs[srcs_num], R_OK)) {

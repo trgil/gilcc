@@ -31,6 +31,9 @@
 #define C_STANDARD_C11_GNU  0x0100UL
 #define C_STANDARD_C17_ORIG 0x0200UL
 
+/* Standards complience options */
+#define STD_COMPL_OPT(STD) (1-(STD<<1))
+
 /* Standard dependent limits */
 struct std_trans_lim {
 
@@ -106,6 +109,9 @@ struct std_trans_lim {
 /* Translation configurations */
 struct trans_config {
 
+    /* Standard complience */
+    unsigned long std;
+
     /* Standard based configurations */
     struct std_trans_lim lim;
 
@@ -113,5 +119,8 @@ struct trans_config {
     bool exp_trigraphs;
     bool exp_cpp_cmnts;
 };
+
+/* std_comp API Functions */
+int set_std_limits(struct std_trans_lim *lims, unsigned long std);
 
 #endif /* _STD_COMP_H__ */
