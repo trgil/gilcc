@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include "src_parser.h"
+#include "analysis_print.h"
 
 #define TMP_FILE_NAME           ".gilcc-tmpfile-XXXXXX"
 #define TMP_FILE_NAME_SIZE      22
@@ -149,12 +150,11 @@ static int src_parser_tstage_1( const int dst_fd,
                 break;
 
             case '?':
-                if (exp_trigraphs == true) {
-                    PSTACK_PUSH_CHAR(stk, '?');
-                    PBUF_ADVN(buf);
-                    state = 3;
-                    break;
-                }
+                PSTACK_PUSH_CHAR(stk, '?');
+                PBUF_ADVN(buf);
+                state = 3;
+                break;
+
             default:
                 pbuf_write_char(&buf, dst_fd);
                 PBUF_ADVN(buf);
@@ -222,10 +222,13 @@ static int src_parser_tstage_1( const int dst_fd,
                     break;
                 }
 
-                if (c) {
+                if (c && exp_trigraphs) {
                     write_char(c, dst_fd);
                     PSTACK_CLEAR(stk);
                     PBUF_ADVN(buf);
+                } else if (c && !exp_trigraphs) {
+                    analysis_print(APRINT_WARNING, 2, "unsupported trigraph sequence.");
+                    pstack_write(&stk, dst_fd);
                 } else {
                     pstack_write(&stk, dst_fd);
                 }
@@ -305,6 +308,8 @@ static int src_parser_tstage_3( const int dst_fd,
      *  - Truncate sequential white spaces.
      *  - Truncate sequential new-lines (not required by standard).
      */
+
+    /* TODO: do not replace comments/spaces inside strings */
 
     pbuf_fill(&buf, src_fd);
     while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
@@ -405,7 +410,9 @@ static int src_parser_tstage_3( const int dst_fd,
         }
     }
 
-    /* TODO: check if file ends an unterminated c-style comment, warn if not? */
+    if ((state == 2) || (state == 3))
+        analysis_print(APRINT_ERROR, 2, "file ends with an unterminated comment.");
+
     return 0;
 }
 

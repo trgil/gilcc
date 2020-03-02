@@ -22,6 +22,7 @@
 #include "gilcc.h"
 #include "std_comp.h"
 #include "src_parser.h"
+#include "analysis_print.h"
 
 static char *srcs[GILCC_SRCS_MAX_NUM];
 static int srcs_num;
@@ -51,7 +52,7 @@ static void print_version(void)
 
 static inline int std_error(void)
 {
-    fprintf(stderr, "Invalid standard configuration.\n");
+    analysis_print(APRINT_ERROR, 1, "multiple standard declarations.");
     return -1;
 }
 
@@ -84,8 +85,12 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                 if (cfg->std)
                     return std_error();
 
+                if (cfg->exp_trigraphs)
+                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                else
+                    cfg->exp_trigraphs = true;
+
                 cfg->std = C_STANDARD_C90_ORIG;
-                cfg->exp_trigraphs = true;
 
             } else if (!strcmp(cmd, "-std=gnu90")) {
 
@@ -109,8 +114,12 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                 if (cfg->std)
                     return std_error();
 
+                if (cfg->exp_trigraphs)
+                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                else
+                    cfg->exp_trigraphs = true;
+
                 cfg->std = C_STANDARD_C99_ORIG;
-                cfg->exp_trigraphs = true;
                 cfg->exp_cpp_cmnts = true;
 
             } else if (!strcmp(cmd, "-std=gnu99")) {
@@ -127,8 +136,12 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                 if (cfg->std)
                     return std_error();
 
+                if (cfg->exp_trigraphs)
+                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                else
+                    cfg->exp_trigraphs = true;
+
                 cfg->std = C_STANDARD_C11_ORIG;
-                cfg->exp_trigraphs = true;
                 cfg->exp_cpp_cmnts = true;
 
             } else if (!strcmp(cmd, "-std=gnu11")) {
@@ -145,13 +158,20 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                 if (cfg->std)
                     return std_error();
 
+                if (cfg->exp_trigraphs)
+                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                else
+                    cfg->exp_trigraphs = true;
+
                 cfg->std = C_STANDARD_C17_ORIG;
-                cfg->exp_trigraphs = true;
                 cfg->exp_cpp_cmnts = true;
 
             } else if ( !strcmp(cmd, "-trigraphs")) {
 
-                cfg->exp_trigraphs = true;
+                if (cfg->exp_trigraphs)
+                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                else
+                    cfg->exp_trigraphs = true;
 
             } else if (!strncmp(cmd, "-D", 2)) {
                 if (defs_num >= GILCC_DEFS_MAX_NUM) {
