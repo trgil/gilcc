@@ -81,6 +81,24 @@ static inline int pstack_write(struct pstack *stk, const int ofd)
     return write_size;
 }
 
+int *line_reduce_lst = NULL;
+static int line_reduce_lst_size;
+
+static inline int line_reduce_add_line(int line_num, int seq_num)
+{
+    if (!line_reduce_lst)
+        return -1;
+
+    if (seq_num >= line_reduce_lst_size)
+        return -1;
+
+    line_reduce_lst[seq_num] = line_num;
+
+    return 0;
+}
+
+/* TODO: add file tracking and per-file line/char count. */
+
 static void print_file_full(int fd)
 {
     char f_buf[PARSER_BUF_SIZE];
@@ -227,6 +245,7 @@ static int src_parser_tstage_1( const int dst_fd,
                     PSTACK_CLEAR(stk);
                     PBUF_ADVN(buf);
                 } else if (c && !exp_trigraphs) {
+                    /* TODO: track line/char/file-name & add to error message */
                     analysis_print(APRINT_WARNING, 2, "unsupported trigraph sequence.");
                     pstack_write(&stk, dst_fd);
                 } else {
@@ -245,6 +264,60 @@ static int src_parser_tstage_1( const int dst_fd,
     return 0;
 }
 
+static int src_parser_line_split_cnt(const int src_fd)
+{
+    struct pbuf buf = {
+        .pbuf_indx = 0,
+        .pbuf_content_size = 0
+    };
+
+    int state = 0;
+
+    line_reduce_lst_size = 0;
+    pbuf_fill(&buf, src_fd);
+
+    while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
+        switch (state) {
+        case 0:
+            if (PBUF_CUR_CHAR(buf) == '\\')
+                state = 1;
+
+            PBUF_ADVN(buf);
+            break;
+
+        case 1:
+            if (PBUF_CUR_CHAR(buf) != '\\') {
+                state = 0;
+                if (PBUF_CUR_CHAR(buf) == '\n')
+                    line_reduce_lst_size++;
+            }
+
+            PBUF_ADVN(buf);
+            break;
+
+        default:
+            return -1;
+        }
+    }
+
+    if (line_reduce_lst_size) {
+
+        /* Allocate reduced lines record. */
+        line_reduce_lst = (int *)malloc(sizeof(int) * line_reduce_lst_size);
+        if (!line_reduce_lst)
+            return -1;
+    }
+
+    return 0;
+}
+
+/* TODO: src_parser_wspace_analyzer.
+ * Go over code lines and find:
+ *  Sequential empty lines.
+ *  Tab/Space mixes.
+ *  Sequential split lines.
+ */
+
 static int src_parser_tstage_2( const int dst_fd,
                                 const int src_fd)
 {
@@ -253,6 +326,8 @@ static int src_parser_tstage_2( const int dst_fd,
         .pbuf_content_size = 0
     };
 
+    int line_split_cntr = 0;
+    int line_cntr = 1;
     int state = 0;
 
     /* CPP Translation phase 2:
@@ -263,21 +338,33 @@ static int src_parser_tstage_2( const int dst_fd,
     while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
         switch (state) {
         case 0:
-            if (PBUF_CUR_CHAR(buf) == '\\')
+            if (PBUF_CUR_CHAR(buf) == '\\') {
                 state = 1;
-            else
+            } else {
+
+                if (PBUF_CUR_CHAR(buf) == '\n')
+                    line_cntr++;
+
                 pbuf_write_char(&buf, dst_fd);
+            }
 
             PBUF_ADVN(buf);
             break;
 
         case 1:
-            if (PBUF_CUR_CHAR(buf) == '\n')
-                PBUF_ADVN(buf);
-            else
+            if (PBUF_CUR_CHAR(buf) == '\\') {
                 write_char('\\', dst_fd);
-
-            state = 0;
+                PBUF_ADVN(buf);
+            } else {
+                state = 0;
+                if (PBUF_CUR_CHAR(buf) == '\n') {
+                    /* TODO: Check return value of this */
+                    line_reduce_add_line(line_cntr++, line_split_cntr++);
+                    PBUF_ADVN(buf);
+                } else {
+                    write_char('\\', dst_fd);
+                }
+            }
             break;
 
         default:
@@ -288,6 +375,8 @@ static int src_parser_tstage_2( const int dst_fd,
     /* TODO: check if file ends with '\n', warn if not? */
     return 0;
 }
+
+/* TODO: analyze comments (mixed comment sequences, comments inside of strings, etc.) */
 
 static int src_parser_tstage_3( const int dst_fd,
                                 const int src_fd,
@@ -447,6 +536,15 @@ int src_parser_cpp(const char *src, const struct trans_config *cfg)
 
     /* Source file no longer needed */
     close(src_fd);
+
+    /* Rewind stage 1 output file */
+    if (lseek(tmp_fd1, 0, SEEK_SET)) {
+        fprintf(stderr, "**Error: Could not set offset.\n");
+        return -1;
+    }
+    /* Count the number of split lines we have */
+    /* TODO: check return value */
+    src_parser_line_split_cnt(tmp_fd1);
 
     /* Open temporary work-file for stage 2 */
     strncpy(fname2, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
