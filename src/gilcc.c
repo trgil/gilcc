@@ -27,10 +27,10 @@
 static char *srcs[GILCC_SRCS_MAX_NUM];
 static int srcs_num;
 
-static char *ipaths[GILCC_IPATH_MAX_NUM];
+static char **ipaths;
 static int ipaths_num;
 
-static char *defs[GILCC_DEFS_MAX_NUM];
+static char **defs;
 static int defs_num;
 
 static void print_usage(void)
@@ -56,9 +56,49 @@ static inline int std_error(void)
     return -1;
 }
 
+static int pre_parse_cmd(int argc, char** argv)
+{
+    char *cmd;
+
+    while (argc) {
+        cmd = argv[0];
+
+        if (cmd[0] == '-') {
+            /* Probably a flag. */
+
+            if (!strncmp(cmd, "-D", 2))
+                defs_num++;
+            else if (!strncmp(cmd, "-I", 2))
+                ipaths_num++;
+        }
+
+        argc--;
+        argv++;
+    }
+
+    if (ipaths_num) {
+        ipaths = (char **)malloc(sizeof(char *) * ipaths_num);
+        if (!ipaths)
+            return -1;
+    }
+
+    if (defs_num) {
+        defs = (char **)malloc(sizeof(char *) * defs_num);
+        if (!defs) {
+            free(ipaths);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 {
     char *cmd;
+    int ipath_cntr = 0;
+    int defs_cntr = 0;
+
     if (!cfg)
         return -1;
 
@@ -174,13 +214,13 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                     cfg->exp_trigraphs = true;
 
             } else if (!strncmp(cmd, "-D", 2)) {
-                if (defs_num >= GILCC_DEFS_MAX_NUM) {
+                if (defs_cntr >= defs_num) {
                     fprintf(stderr, "**Error: too many defines.\n");
                     return -1;
                 }
 
                 if (strlen(cmd) > 2) {
-                    defs[defs_num++] = (cmd + 2);
+                    defs[defs_cntr++] = (cmd + 2);
                 } else {
                     if (argc == 1) {
                         fprintf(stderr, "**Error: missing define parameter.\n");
@@ -189,17 +229,17 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 
                     argc--;
                     argv++;
-                    defs[defs_num++] = argv[0];
+                    defs[defs_cntr++] = argv[0];
                 }
 
             } else if (!strncmp(cmd, "-I", 2)) {
-                if (ipaths_num >= GILCC_IPATH_MAX_NUM) {
+                if (ipath_cntr >= ipaths_num) {
                     fprintf(stderr, "**Error: too many defines.\n");
                     return -1;
                 }
 
                 if (strlen(cmd) > 2) {
-                    ipaths[ipaths_num++] = (cmd + 2);
+                    ipaths[ipath_cntr++] = (cmd + 2);
 
                 } else {
                     if (argc == 1) {
@@ -209,7 +249,7 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 
                     argc--;
                     argv++;
-                    ipaths[ipaths_num++] = argv[0];
+                    ipaths[ipath_cntr++] = argv[0];
                 }
             }
 
@@ -240,9 +280,34 @@ int main(int argc, char** argv)
         .exp_cpp_cmnts = false,
     };
 
-    if(parse_cmd(--argc, ++argv, &cfg) < 0)
+    int i,j;
+    
+    pre_parse_cmd(--argc, ++argv);
+
+    if(parse_cmd(argc, argv, &cfg) < 0)
         /* Something went wrong during CLI command parsing. */
         return 1;
+
+    /* Check duplications in command-line arguments */
+    if (ipaths_num) {
+        for (i = 0; i < (ipaths_num - 1); i++) {
+            for (j = i + 1; j < ipaths_num; j++) {
+                if (!strcmp(ipaths[i], ipaths[j]))
+                    analysis_print(APRINT_WARNING, 1, "duplicate path via command-line.");
+            }
+        }
+    }
+
+    if (defs_num) {
+        for (i = 0; i < (defs_num - 1); i++) {
+            for (j = i + 1; j < defs_num; j++) {
+                if (!strcmp(defs[i], defs[j]))
+                    analysis_print(APRINT_WARNING, 1, "duplicate definition via command-line.");
+            }
+        }
+    }
+
+    /* TODO: verify missing files check */
 
     if (srcs_num == 0) {
         if (argc > 2)
@@ -254,6 +319,7 @@ int main(int argc, char** argv)
     }
 
     /* TODO: configure policy for multiple standard flags */
+
     if (!cfg.std) {
         cfg.std = C_STANDARD_C11_GNU;
         cfg.exp_cpp_cmnts = true;
@@ -274,6 +340,12 @@ int main(int argc, char** argv)
         if (src_parser_cpp(srcs[srcs_num], &cfg) < 0)
             return 1;
     }
+
+    if (ipaths)
+        free(ipaths);
+
+    if (defs)
+        free(defs);
 
     return 0;
 }
