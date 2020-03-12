@@ -388,7 +388,6 @@ static int src_parser_tstage_3( const int dst_fd,
     };
 
     int state = 0;
-    bool in_string = false;
 
     /* CPP Translation phase 3:
      *  - Replace comments with white spaces.
@@ -412,27 +411,16 @@ static int src_parser_tstage_3( const int dst_fd,
 
             case ' ':
             case '\t':
-                if (in_string) {
-                    pbuf_write_char(&buf, dst_fd);
-                } else {
-                    write_char(' ', dst_fd);
-                    state = 5;
-                }
-                PBUF_ADVN(buf);
-                break;
-
-            case '\n':
-                if (in_string) {
-                    pbuf_write_char(&buf, dst_fd);
-                } else {
-                    write_char('\n', dst_fd);
-                    state = 6;
-                }
+                write_char(' ', dst_fd);
+                state = 5;
                 PBUF_ADVN(buf);
                 break;
 
             case '\"':
-                in_string = (in_string)?false:true;
+                write_char('\"', dst_fd);
+                state = 6;
+                PBUF_ADVN(buf);
+                break;
 
             default:
                 pbuf_write_char(&buf, dst_fd);
@@ -481,6 +469,7 @@ static int src_parser_tstage_3( const int dst_fd,
             break;
 
         case 5:
+            /* TODO: track reduced characters */
             if ((PBUF_CUR_CHAR(buf) == ' ') || (PBUF_CUR_CHAR(buf) == '\t'))
                 PBUF_ADVN(buf);
             else
@@ -488,10 +477,19 @@ static int src_parser_tstage_3( const int dst_fd,
             break;
 
         case 6:
-            if (PBUF_CUR_CHAR(buf) == '\n')
-                PBUF_ADVN(buf);
-            else
+            if (PBUF_CUR_CHAR(buf) == '\\')
+                state = 7;
+            else if (PBUF_CUR_CHAR(buf) == '\"')
                 state = 0;
+
+            pbuf_write_char(&buf, dst_fd);
+            PBUF_ADVN(buf);
+            break;
+
+        case 7:
+            pbuf_write_char(&buf, dst_fd);
+            PBUF_ADVN(buf);
+            state = 6;
             break;
 
         default:
