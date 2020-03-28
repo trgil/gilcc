@@ -50,30 +50,67 @@ static void print_version(void)
     printf("gilcc - Gil's Code Cleanup, version %.1f\n", GILCC_VERSION);
 }
 
-static inline int std_error(void)
+static void cli_flag_analysis_print(int f_indx, char *flg, char *msg)
 {
-    analysis_print(APRINT_ERROR, 1, "multiple standard declarations.");
-    return -1;
+    /* TODO: use analysis print. */
+    printf("CLI flag warning (%d,%s): %s\n", f_indx, flg, msg);
 }
 
-static int pre_parse_cmd(int argc, char** argv)
+static int pre_parse_cmd(int argc, char** argv, struct trans_config *cfg)
 {
     char *cmd;
+    int f_indx = 0;
+
+    /* We count the number of include-path and macro definition parameters,
+     * and allocate a buffer for storring them in proper order.
+     * We also determin the standard to be used, before we parse all the other
+     * flags.
+     */
 
     while (argc) {
         cmd = argv[0];
 
         if (cmd[0] == '-') {
-            /* Probably a flag. */
 
-            if (!strncmp(cmd, "-D", 2))
+            if (!strncmp(cmd, "-D", 2)) {
                 defs_num++;
-            else if (!strncmp(cmd, "-I", 2))
+
+            } else if (!strncmp(cmd, "-I", 2)) {
                 ipaths_num++;
+
+            } else if ( !strcmp(cmd, "-ansi") ||
+                        !strncmp(cmd, "-std=", 5)) {
+
+                int i;
+
+                for (i = 0; i < STD_SUPPORTED_NUM; i++) {
+
+                    int j = 0;
+
+                    while (std_configs[i].cli_flags[j]) {
+                        if (!strcmp(cmd, std_configs[i].cli_flags[j])) {
+                            if (cfg->std)
+                                cli_flag_analysis_print(f_indx, cmd, "multiple standard declarations.");
+
+                            if (cfg->std < std_configs[i].std) {
+                                cfg->std = std_configs[i].std;
+                                cfg->exp_trigraphs = std_configs[i].exp_trigraphs;
+                                cfg->exp_cpp_cmnts = std_configs[i].exp_cpp_cmnts;
+                            }
+
+                            i = STD_SUPPORTED_NUM;
+                            break;
+                        }
+
+                        j++;
+                    }
+                }
+            }
         }
 
         argc--;
         argv++;
+        f_indx++;
     }
 
     if (ipaths_num) {
@@ -90,6 +127,15 @@ static int pre_parse_cmd(int argc, char** argv)
         }
     }
 
+    /* This is the defautl standard if none is provided */
+    if (!cfg->std) {
+        cfg->std = C_STANDARD_C11_GNU;
+        cfg->exp_cpp_cmnts = true;
+        cfg->exp_trigraphs = false;
+    }
+
+    /* TODO: print working standard */
+
     return 0;
 }
 
@@ -98,6 +144,8 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
     char *cmd;
     int ipath_cntr = 0;
     int defs_cntr = 0;
+    int f_indx = 0;
+    int trigraphs_flg = 0;
 
     if (!cfg)
         return -1;
@@ -118,100 +166,17 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
                 srcs_num = 0;
                 return 0;
 
-            } else if ( !strcmp(cmd, "-ansi") ||
-                        !strcmp(cmd, "-std=c90") ||
-                        !strcmp(cmd, "-std=iso9899:1990")) {
-
-                if (cfg->std)
-                    return std_error();
+            } else if (!strcmp(cmd, "-trigraphs")) {
 
                 if (cfg->exp_trigraphs)
-                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
+                    if (trigraphs_flg)
+                        cli_flag_analysis_print(f_indx, cmd, "flag duplicate.");
+                    else
+                        cli_flag_analysis_print(f_indx, cmd, "trigraphs are already allowed by the standard.");
                 else
                     cfg->exp_trigraphs = true;
 
-                cfg->std = C_STANDARD_C90_ORIG;
-
-            } else if (!strcmp(cmd, "-std=gnu90")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                cfg->std = C_STANDARD_C90_GNU;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if (!strcmp(cmd, "-std=iso9899:199409")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                cfg->std = C_STANDARD_C95_AMD1;
-                cfg->exp_trigraphs = true;
-
-            } else if ( !strcmp(cmd, "-std=c99") ||
-                        !strcmp(cmd, "-std=iso9899:1999")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                if (cfg->exp_trigraphs)
-                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
-                else
-                    cfg->exp_trigraphs = true;
-
-                cfg->std = C_STANDARD_C99_ORIG;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if (!strcmp(cmd, "-std=gnu99")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                cfg->std = C_STANDARD_C99_GNU;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if ( !strcmp(cmd, "-std=c11") ||
-                        !strcmp(cmd, "-std=iso9899:2011")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                if (cfg->exp_trigraphs)
-                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
-                else
-                    cfg->exp_trigraphs = true;
-
-                cfg->std = C_STANDARD_C11_ORIG;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if (!strcmp(cmd, "-std=gnu11")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                cfg->std = C_STANDARD_C11_GNU;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if ( !strcmp(cmd, "-std=c17") ||
-                        !strcmp(cmd, "-std=iso9899:2017")) {
-
-                if (cfg->std)
-                    return std_error();
-
-                if (cfg->exp_trigraphs)
-                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
-                else
-                    cfg->exp_trigraphs = true;
-
-                cfg->std = C_STANDARD_C17_ORIG;
-                cfg->exp_cpp_cmnts = true;
-
-            } else if ( !strcmp(cmd, "-trigraphs")) {
-
-                if (cfg->exp_trigraphs)
-                    analysis_print(APRINT_WARNING, 1, "trigraphs are already allowed by the standard.");
-                else
-                    cfg->exp_trigraphs = true;
+                trigraphs_flg++;
 
             } else if (!strncmp(cmd, "-D", 2)) {
                 if (defs_cntr >= defs_num) {
@@ -282,7 +247,9 @@ int main(int argc, char** argv)
 
     int i,j;
     
-    pre_parse_cmd(--argc, ++argv);
+    pre_parse_cmd(--argc, ++argv, &cfg);
+
+    /* TODO: print working standard */
 
     if(parse_cmd(argc, argv, &cfg) < 0)
         /* Something went wrong during CLI command parsing. */
@@ -307,6 +274,7 @@ int main(int argc, char** argv)
         }
     }
 
+    /* TODO: check environment variables (relevant to compiler) */
     /* TODO: verify missing files check */
 
     if (srcs_num == 0) {
@@ -315,14 +283,8 @@ int main(int argc, char** argv)
             return 2;
 
         /* We have a single flag, no input files (probably a -v or -h). */
+        /* TODO: verify this ^ */
         return 0;
-    }
-
-    /* TODO: configure policy for multiple standard flags */
-
-    if (!cfg.std) {
-        cfg.std = C_STANDARD_C11_GNU;
-        cfg.exp_cpp_cmnts = true;
     }
 
     if (set_std_limits(&cfg.lim, cfg.std)) {

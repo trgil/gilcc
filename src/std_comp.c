@@ -15,8 +15,68 @@
  ***********************************************************************/
 
 #include <string.h>
+#include <stdbool.h>
 
 #include "std_comp.h"
+
+struct std_config std_configs[STD_SUPPORTED_NUM] = {
+    {
+        .std = C_STANDARD_C90_ORIG,
+        .name = "ANSI C90",
+        .cli_flags = {"-ansi", "-std=c90", "-std=iso9899:1990", NULL},
+        .exp_trigraphs = true,
+        .exp_cpp_cmnts = false,
+    },
+    {
+        .std = C_STANDARD_C90_GNU,
+        .name = "ANSI C90 with GNU extensions",
+        .cli_flags = {"-std=gnu90", NULL, NULL, NULL},
+        .exp_trigraphs = false,
+        .exp_cpp_cmnts = true,
+    },
+    {
+        .std = C_STANDARD_C95_AMD1,
+        .name = "ANSI C90 with the 95 amendments",
+        .cli_flags = {"-std=iso9899:199409", NULL, NULL, NULL},
+        .exp_trigraphs = true,
+        .exp_cpp_cmnts = false,
+    },
+    {
+        .std = C_STANDARD_C99_ORIG,
+        .name = "ANSI C99",
+        .cli_flags = {"-std=c99", "-std=iso9899:1999", NULL, NULL},
+        .exp_trigraphs = true,
+        .exp_cpp_cmnts = true,
+    },
+    {
+        .std = C_STANDARD_C99_GNU,
+        .name = "ANSI C99 with GNU extensions",
+        .cli_flags = {"-std=gnu99", NULL, NULL, NULL},
+        .exp_trigraphs = false,
+        .exp_cpp_cmnts = true,
+    },
+    {
+        .std = C_STANDARD_C11_ORIG,
+        .name = "ANSI C11",
+        .cli_flags = {"-std=c11", "-std=iso9899:2011", NULL, NULL},
+        .exp_trigraphs = true,
+        .exp_cpp_cmnts = true,
+    },
+    {
+        .std = C_STANDARD_C11_GNU,
+        .name = "ANSI C11 with GNU extensions",
+        .cli_flags = {"-std=gnu11", NULL, NULL, NULL},
+        .exp_trigraphs = false,
+        .exp_cpp_cmnts = true,
+    },
+    {
+        .std = C_STANDARD_C17_ORIG,
+        .name = "ANSI C17",
+        .cli_flags = {"-std=c17", "-std=iso9899:2017", NULL, NULL},
+        .exp_trigraphs = true,
+        .exp_cpp_cmnts = true,
+    },
+};
 
 int set_std_limits(struct std_trans_lim *lims, unsigned long std)
 {

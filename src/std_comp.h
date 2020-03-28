@@ -106,8 +106,24 @@ struct std_trans_lim {
     unsigned int cmpnd_nst_lvl;
 };
 
+struct std_config {
+    unsigned long std;
+    char *name;
+    char *cli_flags[4];
+
+    /* Default configurations */
+    bool exp_trigraphs;
+    bool exp_cpp_cmnts;
+};
+
+#define STD_SUPPORTED_NUM 8
+
+extern struct std_config std_configs[STD_SUPPORTED_NUM];
+
 /* Translation configurations */
 struct trans_config {
+
+    /* TODO: add pointer to std struct in std_configs*/
 
     /* Standard complience */
     unsigned long std;
