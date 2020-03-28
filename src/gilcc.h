@@ -22,7 +22,5 @@
 /* General configurations */
 #define GILCC_DEFAULT_VERBOSITY_LEVEL   1
 #define GILCC_SRCS_MAX_NUM              20
-#define GILCC_IPATH_MAX_NUM             20
-#define GILCC_DEFS_MAX_NUM              30
 
 #endif /* _GILCC_H__ */
