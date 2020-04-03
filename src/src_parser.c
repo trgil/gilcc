@@ -264,7 +264,7 @@ static int src_parser_tstage_1( const int dst_fd,
     return 0;
 }
 
-static int src_parser_line_split_cnt(const int src_fd)
+static int src_parser_pre_stage_2(const int src_fd)
 {
     struct pbuf buf = {
         .pbuf_indx = 0,
@@ -272,6 +272,22 @@ static int src_parser_line_split_cnt(const int src_fd)
     };
 
     int state = 0;
+    int new_line_cnt;
+    bool line_empty = true;
+
+    /* Pre-stage 2 processing:
+     *
+     *  - Find style errors:
+     *      - Tabs mixed with spaces.
+     *      - Multiple sequential new lines.
+     *      - Line containing nothing but white spaces.
+     *
+     *  - Get number of line splits and allocate split-line record
+     *    object.
+     */
+
+    /* TODO: search for Sequential split lines. */
+    /* TODO: allow for mixing tabs and spaces in comments */
 
     line_reduce_lst_size = 0;
     pbuf_fill(&buf, src_fd);
@@ -279,20 +295,130 @@ static int src_parser_line_split_cnt(const int src_fd)
     while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
         switch (state) {
         case 0:
-            if (PBUF_CUR_CHAR(buf) == '\\')
-                state = 1;
+
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '\\':
+                state++;
+            case '\n':
+                state++;
+            case '\t':
+                state++;
+            case ' ':
+                state++;
+                break;
+
+            default:
+                break;
+            }
 
             PBUF_ADVN(buf);
             break;
 
         case 1:
-            if (PBUF_CUR_CHAR(buf) != '\\') {
-                state = 0;
-                if (PBUF_CUR_CHAR(buf) == '\n')
-                    line_reduce_lst_size++;
-            }
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '\t':
+                analysis_print(APRINT_WARNING, 2, "Mixing spaces and tabs.");
+                state++;
+            case ' ':
+                PBUF_ADVN(buf);
+                break;
 
-            PBUF_ADVN(buf);
+            case '\\':
+                line_empty = false;
+                state++;
+            case '\n':
+                state += 2;
+                PBUF_ADVN(buf);
+                break;
+
+            default:
+                line_empty = false;
+                state = 0;
+                break;
+            }
+            break;
+
+        case 2:
+            switch (PBUF_CUR_CHAR(buf)) {
+            case ' ':
+                analysis_print(APRINT_WARNING, 2, "Mixing spaces and tabs.");
+                state = 1;
+            case '\t':
+                PBUF_ADVN(buf);
+                break;
+
+            case '\\':
+                line_empty = false;
+                state++;
+            case '\n':
+                state++;
+                PBUF_ADVN(buf);
+                break;
+
+            default:
+                line_empty = false;
+                state = 0;
+                break;
+            }
+            break;
+
+        case 3:
+            if (new_line_cnt < 1 && line_empty)
+                analysis_print(APRINT_WARNING, 2, "Line contains only white spaces.");
+            else
+                line_empty = true;
+
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '\n':
+                new_line_cnt++;
+                if (new_line_cnt > 2)
+                    analysis_print(APRINT_WARNING, 2, "Multiple sequential new-lines.");
+                PBUF_ADVN(buf);
+                break;
+
+            case ' ':
+                state--;
+            case '\t':
+                state--;
+                new_line_cnt = 0;
+                PBUF_ADVN(buf);
+                break;
+
+            case '\\':
+                new_line_cnt = 0;
+                line_empty = false;
+                state++;
+                PBUF_ADVN(buf);
+                break;
+
+            default:
+                new_line_cnt = 0;
+                line_empty = false;
+                state = 0;
+                break;
+            }
+            break;
+
+        case 4:
+            switch (PBUF_CUR_CHAR(buf)) {
+            case '\n':
+                line_empty = true;
+                line_reduce_lst_size++;
+                state = 0;
+            case '\\':
+                PBUF_ADVN(buf);
+                break;
+
+            case ' ':
+                state--;
+            case '\t':
+                state -= 2;
+                PBUF_ADVN(buf);
+                break;
+            default:
+                state = 0;
+                break;
+            }
             break;
 
         default:
@@ -300,9 +426,8 @@ static int src_parser_line_split_cnt(const int src_fd)
         }
     }
 
+    /* Allocate reduced lines record object. */
     if (line_reduce_lst_size) {
-
-        /* Allocate reduced lines record. */
         line_reduce_lst = (int *)malloc(sizeof(int) * line_reduce_lst_size);
         if (!line_reduce_lst)
             return -1;
@@ -310,13 +435,6 @@ static int src_parser_line_split_cnt(const int src_fd)
 
     return 0;
 }
-
-/* TODO: src_parser_wspace_analyzer.
- * Go over code lines and find:
- *  Sequential empty lines.
- *  Tab/Space mixes.
- *  Sequential split lines.
- */
 
 static int src_parser_tstage_2( const int dst_fd,
                                 const int src_fd)
@@ -542,7 +660,7 @@ int src_parser_cpp(const char *src, const struct trans_config *cfg)
     }
     /* Count the number of split lines we have */
     /* TODO: check return value */
-    src_parser_line_split_cnt(tmp_fd1);
+    src_parser_pre_stage_2(tmp_fd1);
 
     /* Open temporary work-file for stage 2 */
     strncpy(fname2, TMP_FILE_NAME, TMP_FILE_NAME_SIZE);
