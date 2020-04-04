@@ -15,13 +15,14 @@
  ***********************************************************************/
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "analysis_print.h"
 
 static char *ap_msgs[APRINT_TYPES_NUM] = {
-    [APRINT_INFO] = "INFO",
-    [APRINT_WARNING] = "WARNING",
-    [APRINT_ERROR] = "ERROR"
+    [APRINT_INFO]       = "INFO    ",
+    [APRINT_WARNING]    = "WARNING ",
+    [APRINT_ERROR]      = "ERROR   "
 };
 
 int analysis_print(enum analysis_print_type ap_type, int p_num, char *msg)
@@ -30,5 +31,14 @@ int analysis_print(enum analysis_print_type ap_type, int p_num, char *msg)
         return -1;
 
     printf("%s:%4d:%s\n", ap_msgs[ap_type], p_num, msg);
+    return 0;
+}
+
+int analysis_print_param_1(enum analysis_print_type ap_type, int p_num, char *msg, char *param)
+{
+    if ((ap_type >= APRINT_TYPES_NUM) || (ap_type < 0))
+        return -1;
+
+    printf("%s:%4d:%s (%s)\n", ap_msgs[ap_type], p_num, msg, param);
     return 0;
 }

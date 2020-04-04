@@ -28,5 +28,6 @@ enum analysis_print_type {
 /* Analysis Printer API */
 
 int analysis_print(enum analysis_print_type ap_type, int p_num, char *msg);
+int analysis_print_param_1(enum analysis_print_type ap_type, int p_num, char *msg, char *param);
 
 #endif /* _ANALYSIS_PRINTER_H__ */

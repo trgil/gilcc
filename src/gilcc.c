@@ -50,16 +50,36 @@ static void print_version(void)
     printf("gilcc - Gil's Code Cleanup, version %.1f\n", GILCC_VERSION);
 }
 
+static void cli_flags_analysis_print_2(int f_indx_1, int f_indx_2, char *flg_1, char *flg_2, char *msg)
+{
+    char p_msg[120];
+
+    sprintf(p_msg, "CLI flag: (%d, %s) %s [previous: (%d, %s)]", f_indx_1, flg_1, msg, f_indx_2, flg_2);
+    analysis_print(APRINT_WARNING, 2, p_msg);
+}
+
 static void cli_flag_analysis_print(int f_indx, char *flg, char *msg)
 {
-    /* TODO: use analysis print. */
-    printf("CLI flag warning (%d,%s): %s\n", f_indx, flg, msg);
+    char p_msg[120];
+
+    sprintf(p_msg, "CLI flag: (%d, %s) %s", f_indx, flg, msg);
+    analysis_print(APRINT_WARNING, 2, p_msg);
+}
+
+static void cli_param_analysis_print(char *param, char *msg)
+{
+    char p_msg[120];
+
+    sprintf(p_msg, "CLI parameter: (%s) %s", param, msg);
+    analysis_print(APRINT_WARNING, 2, p_msg);
 }
 
 static int pre_parse_cmd(int argc, char** argv, struct trans_config *cfg)
 {
     char *cmd;
-    int f_indx = 0;
+    int f_indx = 1;
+    char *std_name = NULL;
+    int std_indx = -1;
 
     /* We count the number of include-path and macro definition parameters,
      * and allocate a buffer for storring them in proper order.
@@ -90,13 +110,17 @@ static int pre_parse_cmd(int argc, char** argv, struct trans_config *cfg)
                     while (std_configs[i].cli_flags[j]) {
                         if (!strcmp(cmd, std_configs[i].cli_flags[j])) {
                             if (cfg->std)
-                                cli_flag_analysis_print(f_indx, cmd, "multiple standard declarations.");
+                                cli_flags_analysis_print_2(f_indx, std_indx, cmd, std_name,
+                                        "multiple standard declarations");
 
                             if (cfg->std < std_configs[i].std) {
                                 cfg->std = std_configs[i].std;
                                 cfg->exp_trigraphs = std_configs[i].exp_trigraphs;
                                 cfg->exp_cpp_cmnts = std_configs[i].exp_cpp_cmnts;
                             }
+
+                            std_name = cmd;
+                            std_indx = f_indx;
 
                             i = STD_SUPPORTED_NUM;
                             break;
@@ -134,7 +158,7 @@ static int pre_parse_cmd(int argc, char** argv, struct trans_config *cfg)
         cfg->exp_trigraphs = false;
     }
 
-    /* TODO: print working standard */
+    /* TODO: print working standard by referencing std struct */
 
     return 0;
 }
@@ -144,7 +168,7 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
     char *cmd;
     int ipath_cntr = 0;
     int defs_cntr = 0;
-    int f_indx = 0;
+    int f_indx = 1;
     int trigraphs_flg = 0;
 
     if (!cfg)
@@ -170,9 +194,9 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 
                 if (cfg->exp_trigraphs)
                     if (trigraphs_flg)
-                        cli_flag_analysis_print(f_indx, cmd, "flag duplicate.");
+                        cli_flag_analysis_print(f_indx, cmd, "flag duplicate");
                     else
-                        cli_flag_analysis_print(f_indx, cmd, "trigraphs are already allowed by the standard.");
+                        cli_flag_analysis_print(f_indx, cmd, "trigraphs are already allowed by the standard");
                 else
                     cfg->exp_trigraphs = true;
 
@@ -233,7 +257,9 @@ static int parse_cmd(int argc, char** argv, struct trans_config *cfg)
 
         argc--;
         argv++;
+        f_indx++;
     }
+
     return 0;
 }
 
@@ -246,10 +272,8 @@ int main(int argc, char** argv)
     };
 
     int i,j;
-    
-    pre_parse_cmd(--argc, ++argv, &cfg);
 
-    /* TODO: print working standard */
+    pre_parse_cmd(--argc, ++argv, &cfg);
 
     if(parse_cmd(argc, argv, &cfg) < 0)
         /* Something went wrong during CLI command parsing. */
@@ -260,7 +284,7 @@ int main(int argc, char** argv)
         for (i = 0; i < (ipaths_num - 1); i++) {
             for (j = i + 1; j < ipaths_num; j++) {
                 if (!strcmp(ipaths[i], ipaths[j]))
-                    analysis_print(APRINT_WARNING, 1, "duplicate path via command-line.");
+                    cli_param_analysis_print(ipaths[i], "duplicate inclusiong path parameter");
             }
         }
     }
@@ -269,7 +293,7 @@ int main(int argc, char** argv)
         for (i = 0; i < (defs_num - 1); i++) {
             for (j = i + 1; j < defs_num; j++) {
                 if (!strcmp(defs[i], defs[j]))
-                    analysis_print(APRINT_WARNING, 1, "duplicate definition via command-line.");
+                    cli_param_analysis_print(defs[i], "duplicate definition parameter");
             }
         }
     }
@@ -298,7 +322,7 @@ int main(int argc, char** argv)
             continue;
         }
 
-        printf("Processing file [ %s ]:\n", srcs[srcs_num]);
+        analysis_print_param_1(APRINT_INFO, 2, "processing source file", srcs[srcs_num]);
         if (src_parser_cpp(srcs[srcs_num], &cfg) < 0)
             return 1;
     }

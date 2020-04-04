@@ -123,6 +123,24 @@ static inline int write_char(const char c, const int ofd)
     return write(ofd, &c, 1);
 }
 
+/* TODO: Add current file-name to the error message */
+
+static void cpp_warning_analysis_print(int line_num, int char_num, char *msg)
+{
+    char p_msg[120];
+
+    sprintf(p_msg, "CPP code: (line %d, at %d) %s", line_num, char_num, msg);
+    analysis_print(APRINT_WARNING, 2, p_msg);
+}
+
+static void cpp_warning_analysis_line_print(int line_num, char *msg)
+{
+    char p_msg[120];
+
+    sprintf(p_msg, "CPP code: (line %d) %s", line_num, msg);
+    analysis_print(APRINT_WARNING, 2, p_msg);
+}
+
 static int src_parser_tstage_1( const int dst_fd,
                                 const int src_fd,
                                 const bool exp_trigraphs)
@@ -137,6 +155,9 @@ static int src_parser_tstage_1( const int dst_fd,
     };
 
     int state = 0;
+
+    int line_indx = 1;
+    int char_indx = 1;
 
     /* CPP Translation phase 1:
      *  - Map physical characters to source character set.
@@ -163,6 +184,8 @@ static int src_parser_tstage_1( const int dst_fd,
             case '\n':
                 state++;
             case 30:
+                line_indx++;
+                char_indx = 1;
                 write_char('\n', dst_fd);
                 PBUF_ADVN(buf);
                 break;
@@ -245,8 +268,7 @@ static int src_parser_tstage_1( const int dst_fd,
                     PSTACK_CLEAR(stk);
                     PBUF_ADVN(buf);
                 } else if (c && !exp_trigraphs) {
-                    /* TODO: track line/char/file-name & add to error message */
-                    analysis_print(APRINT_WARNING, 2, "unsupported trigraph sequence.");
+                    cpp_warning_analysis_print(line_indx, char_indx, "unsupported trigraph sequence.");
                     pstack_write(&stk, dst_fd);
                 } else {
                     pstack_write(&stk, dst_fd);
@@ -259,6 +281,7 @@ static int src_parser_tstage_1( const int dst_fd,
         default:
             return -1;
         }
+        char_indx++;
     }
 
     return 0;
@@ -270,6 +293,9 @@ static int src_parser_pre_stage_2(const int src_fd)
         .pbuf_indx = 0,
         .pbuf_content_size = 0
     };
+
+    int line_indx = 1;
+    int char_indx = 1;
 
     int state = 0;
     int new_line_cnt;
@@ -317,7 +343,7 @@ static int src_parser_pre_stage_2(const int src_fd)
         case 1:
             switch (PBUF_CUR_CHAR(buf)) {
             case '\t':
-                analysis_print(APRINT_WARNING, 2, "Mixing spaces and tabs.");
+                cpp_warning_analysis_print(line_indx, char_indx, "Mixing spaces and tabs");
                 state++;
             case ' ':
                 PBUF_ADVN(buf);
@@ -341,7 +367,7 @@ static int src_parser_pre_stage_2(const int src_fd)
         case 2:
             switch (PBUF_CUR_CHAR(buf)) {
             case ' ':
-                analysis_print(APRINT_WARNING, 2, "Mixing spaces and tabs.");
+                cpp_warning_analysis_print(line_indx, char_indx, "Mixing spaces and tabs");
                 state = 1;
             case '\t':
                 PBUF_ADVN(buf);
@@ -364,15 +390,18 @@ static int src_parser_pre_stage_2(const int src_fd)
 
         case 3:
             if (new_line_cnt < 1 && line_empty)
-                analysis_print(APRINT_WARNING, 2, "Line contains only white spaces.");
+                cpp_warning_analysis_line_print(line_indx, "Line contains only white spaces");
             else
                 line_empty = true;
+
+            line_indx++;
+            char_indx = 1;
 
             switch (PBUF_CUR_CHAR(buf)) {
             case '\n':
                 new_line_cnt++;
-                if (new_line_cnt > 2)
-                    analysis_print(APRINT_WARNING, 2, "Multiple sequential new-lines.");
+                if (new_line_cnt > 1)
+                    cpp_warning_analysis_line_print(line_indx, "Multiple sequential new-lines");
                 PBUF_ADVN(buf);
                 break;
 
@@ -424,6 +453,7 @@ static int src_parser_pre_stage_2(const int src_fd)
         default:
             return -1;
         }
+        char_indx++;
     }
 
     /* Allocate reduced lines record object. */
@@ -490,7 +520,6 @@ static int src_parser_tstage_2( const int dst_fd,
         }
     }
 
-    /* TODO: check if file ends with '\n', warn if not? */
     return 0;
 }
 
@@ -512,10 +541,10 @@ static int src_parser_tstage_3( const int dst_fd,
      *  - Turn horizontal tabs (not in strings) into white spaces
      *      (not required by standard).
      *  - Truncate sequential white spaces.
-     *  - Truncate sequential new-lines (not required by standard).
      */
 
     /* TODO: do not replace comments/spaces inside strings */
+    /* TODO: do not Truncate sequential new-lines */
 
     pbuf_fill(&buf, src_fd);
     while (PBUF_DATA_SIZE(buf) || (pbuf_fill(&buf, src_fd) > 0)) {
@@ -617,6 +646,8 @@ static int src_parser_tstage_3( const int dst_fd,
 
     if ((state == 2) || (state == 3))
         analysis_print(APRINT_ERROR, 2, "file ends with an unterminated comment.");
+
+    /* TODO: check if file ends with '\n' and warn */
 
     return 0;
 }
